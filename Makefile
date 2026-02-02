@@ -160,7 +160,7 @@ release-manual:
 
 clean:
 	@printf "$(BLUE)🧹 清理...$(NC)\n"
-	rm -rf build/ dist/ build-intel/ dist-intel/ __pycache__/ *.spec.backup
+	rm -rf build/ dist/ build-intel/ dist-intel/ __pycache__/ *.spec.backup/ mysql_tool_Intel.dmg
 	rm -f *.icns
 	rm -rf $(ICONSET)
 	find . -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true

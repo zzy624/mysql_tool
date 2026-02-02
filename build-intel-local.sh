@@ -216,7 +216,8 @@ BODY=$(gh release view "$VERSION" --json body -q .body)
 # 替换 Intel 状态（多种可能的文本）
 NEW_BODY=$(echo "$BODY" | sed "s/⏳ Intel (x86_64): 等待本地构建.../✅ Intel (x86_64): 已完成 ($FILE_SIZE)/g")
 # 替换下载链接描述
-NEW_BODY=$(echo "$NEW_BODY" | sed "s|⏳ 请等待 Intel 版本上传...|**Intel Mac**: 下载 \`${APP_NAME_EN}_Intel.${FILE_TYPE,,}\`|g")
+FILE_TYPE_LOWER=$(echo "$FILE_TYPE" | tr '[:upper:]' '[:lower:]')
+NEW_BODY=$(echo "$NEW_BODY" | sed "s|⏳ 请等待 Intel 版本上传...|**Intel Mac**: 下载 \`${APP_NAME_EN}_Intel.${FILE_TYPE_LOWER}\`|g")
 
 # 更新 release
 echo "$NEW_BODY" > /tmp/release_body.txt

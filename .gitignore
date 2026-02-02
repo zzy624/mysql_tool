@@ -17,6 +17,7 @@ go_src
 /.venv/
 
 # 敏感信息
+/config/config.ini
 .env
 .env.local
 *.key
@@ -30,3 +31,5 @@ secrets/
 
 # macOS
 .DS_Store
+*.dmg
+*.zip

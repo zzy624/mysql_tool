@@ -1,9 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+import sys
+
+def get_mysql_plugin_path():
+    import mysql.connector
+    mysql_path = os.path.dirname(mysql.connector.__file__)
+    plugin_path = os.path.join(mysql_path, 'plugins')
+    return plugin_path if os.path.exists(plugin_path) else None
+
+mysql_plugin_path = get_mysql_plugin_path()
+
+binaries = []
+if mysql_plugin_path:
+    for file in os.listdir(mysql_plugin_path):
+        if file.endswith('.so') or file.endswith('.dylib'):
+            binaries.append((os.path.join(mysql_plugin_path, file), 'mysql/connector/plugins'))
+
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=[
         ('./res/mysql_tool.icns','.'),
         ('./templates/v1/template','./templates/v1'),
