@@ -1,13 +1,13 @@
-# Makefile - 数据库调试工具构建管理
+# Makefile - 数据库工具构建管理
 
-APP_NAME := 数据库调试工具
+APP_NAME_CN := 数据库工具
+APP_NAME_EN := mysql_tool
 APP := mysql_tool
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.1")
 ICON_SRC := res/$(APP).png
 ICONSET := $(APP).iconset
 SHELL := /bin/bash
 
-# 颜色定义
 BLUE := \033[0;34m
 GREEN := \033[0;32m
 YELLOW := \033[1;33m
@@ -19,33 +19,25 @@ NC := \033[0m
 
 .PHONY: help pyui qrc builds icon clean clean-all install run status view-release info \
         setup check build-intel build-version \
-        release release-auto release-manual
+        release release-auto release-manual wait-actions
 
-# ==========================================
-# 帮助信息
-# ==========================================
 help:
-	@printf "$(BLUE)🛠️  $(APP_NAME) 构建工具$(NC)\n\n"
+	@printf "$(BLUE)🛠️  $(APP_NAME_CN) 构建工具$(NC)\n\n"
 	@printf "$(CYAN)【UI/资源构建】$(NC)\n"
 	@printf "  make pyui          编译 UI 文件 (pyuic5)\n"
 	@printf "  make qrc           编译资源文件 (pyrcc5)\n"
 	@printf "  make icon          生成 macOS icns 图标\n"
 	@printf "  make builds        本地快速构建 (不上传)\n\n"
 	@printf "$(CYAN)【发布流程】$(NC)\n"
-	@printf "  make release       智能发布 (推荐：自动检测是否需等待)\n"
-	@printf "  make release-auto  全自动发布 (强制等待 Actions 完成)\n"
-	@printf "  make release-manual手动发布 (人工确认后继续)\n"
-	@printf "  make build-intel   仅构建 Intel 并上传 (当前 tag: $(VERSION))\n"
-	@printf "  make build-version V=v1.0.0  指定版本构建\n\n"
+	@printf "  make release       智能发布 (推荐)\n"
+	@printf "  make release-auto  全自动发布\n"
+	@printf "  make release-manual手动发布\n"
+	@printf "  make build-intel   仅构建 Intel (当前 tag: %s)\n" "$(VERSION)"
+	@printf "  make build-version V=v1.0.0  指定版本\n\n"
 	@printf "$(CYAN)【环境管理】$(NC)\n"
 	@printf "  make setup         初始化环境\n"
-	@printf "  make check         检查环境配置\n"
-	@printf "  make clean         清理构建产物\n"
-	@printf "  make clean-all     深度清理\n\n"
-
-# ==========================================
-# 原有功能：UI/资源/图标/构建
-# ==========================================
+	@printf "  make check         检查环境\n"
+	@printf "  make clean         清理构建产物\n\n"
 
 pyui:
 	pyuic5 -o ./ui/pyui/ui_main.py ./skin/main.ui
@@ -73,133 +65,49 @@ $(ICONSET):
 	sips -z 512 512   $(ICON_SRC) --out $(ICONSET)/icon_256x256@2x.png
 	sips -z 512 512   $(ICON_SRC) --out $(ICONSET)/icon_512x512.png
 	sips -z 1024 1024 $(ICON_SRC) --out $(ICONSET)/icon_512x512@2x.png
-	@printf "$(GREEN)✅ 图标集生成完成$(NC)\n"
-
-# ==========================================
-# 环境初始化与检查
-# ==========================================
+	@printf "$(GREEN)✅ 完成$(NC)\n"
 
 setup:
 	@printf "$(BLUE)🔧 初始化环境...$(NC)\n"
 	@chmod +x build-intel-local.sh 2>/dev/null || true
-
 	@if ! command -v gh >/dev/null 2>&1; then \
-		printf "$(YELLOW)⚠️  未安装 GitHub CLI，正在安装...$(NC)\n"; \
 		brew install gh; \
 	fi
-
 	@if ! gh auth status >/dev/null 2>&1; then \
-		printf "$(YELLOW)请登录 GitHub...$(NC)\n"; \
 		gh auth login; \
-	else \
-		printf "$(GREEN)✅ GitHub CLI 已登录$(NC)\n"; \
 	fi
-
 	@if [ ! -f ".env" ]; then \
-		printf "$(BLUE)🔐 生成加密密钥...$(NC)\n"; \
-		KEY=$$(openssl rand -hex 16); \
-		echo "PYINSTALLER_KEY=$$KEY" > .env; \
-		echo "DB_HOST=localhost" >> .env; \
+		echo "DB_HOST=localhost" > .env; \
 		echo "DB_PORT=3306" >> .env; \
 		echo "DB_USER=root" >> .env; \
 		echo "DB_PASSWORD=" >> .env; \
 		echo "DB_NAME=test" >> .env; \
-		printf "$(GREEN)✅ 已生成 .env 文件，请编辑完善配置$(NC)\n"; \
-		printf "$(YELLOW)⚠️  注意：PyInstaller 6.x 已移除加密功能，此密钥仅用于其他用途$(NC)\n"; \
-	else \
-		printf "$(GREEN)✅ .env 文件已存在$(NC)\n"; \
+		printf "$(GREEN)✅ 已生成 .env 文件$(NC)\n"; \
 	fi
 
 check:
 	@printf "$(BLUE)🔍 环境检查$(NC)\n"
 	@printf "最新 Tag: $(GREEN)%s$(NC)\n" "$(VERSION)"
-
-	@if command -v gh >/dev/null 2>&1; then \
-		if gh auth status >/dev/null 2>&1; then \
-			printf "  $(GREEN)✅$(NC) GitHub CLI (已登录)\n"; \
-		else \
-			printf "  $(YELLOW)⚠️$(NC) GitHub CLI (未登录)\n"; \
-		fi \
-	else \
-		printf "  $(RED)❌$(NC) GitHub CLI (未安装)\n"; \
-	fi
-
-	@if [ -f ".env" ]; then \
-		printf "  $(GREEN)✅$(NC) .env 文件\n"; \
-	else \
-		printf "  $(YELLOW)⚠️$(NC) .env 文件 (可选)\n"; \
-	fi
-
-	@if [ -f "build-intel-local.sh" ]; then \
-		printf "  $(GREEN)✅$(NC) 构建脚本\n"; \
-	else \
-		printf "  $(RED)❌$(NC) 构建脚本\n"; \
-	fi
-
-# ==========================================
-# 构建功能
-# ==========================================
+	@command -v gh >/dev/null 2>&1 && printf "  ✅ GitHub CLI\n" || printf "  ❌ GitHub CLI\n"
+	@[ -f ".env" ] && printf "  ✅ .env 文件\n" || printf "  ⚠️  .env 文件\n"
 
 build-intel:
 	@printf "$(BLUE)🚀 构建 Intel 版本...$(NC)\n"
-	@printf "$(BLUE)自动检测到版本: $(GREEN)%s$(NC)\n" "$(VERSION)"
-
+	@printf "$(BLUE)版本: $(GREEN)%s$(NC)\n" "$(VERSION)"
 	@if [ "$(VERSION)" = "v0.0.1" ]; then \
-		printf "$(YELLOW)⚠️  警告: 未检测到 git tag$(NC)\n"; \
-		read -p "继续构建测试版本? (y/n): " confirm; \
-		if [ "$$confirm" != "y" ]; then exit 1; fi; \
+		printf "$(YELLOW)⚠️  未检测到 git tag$(NC)\n"; \
+		read -p "继续? (y/n): " confirm; \
+		[ "$$confirm" != "y" ] && exit 1; \
 	fi
-
 	@./build-intel-local.sh $(VERSION)
 
 build-version:
 	@if [ -z "$(V)" ]; then \
-		printf "$(RED)❌ 错误: 请指定版本号$(NC)\n"; \
-		printf "用法: make build-version V=v1.0.0\n"; \
+		printf "$(RED)❌ 请指定版本: make build-version V=v1.0.0$(NC)\n"; \
 		exit 1; \
 	fi
-	@printf "$(BLUE)🔧 构建指定版本: $(GREEN)%s$(NC)\n" "$(V)"
 	@./build-intel-local.sh $(V)
 
-# ==========================================
-# 三种发布模式（修复版）
-# ==========================================
-
-# 模式 1: 智能发布（默认，推荐）
-release:
-	@printf "$(BLUE)🚀 智能发布模式$(NC)\n"
-	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
-
-	@if [ "$(VERSION)" = "v0.0.1" ]; then \
-		printf "$(RED)❌ 错误: 未检测到 git tag$(NC)\n"; \
-		printf "请先创建并推送 tag:\n"; \
-		printf "  git tag v1.0.0\n"; \
-		printf "  git push origin v1.0.0\n"; \
-		exit 1; \
-	fi
-
-	@printf "$(BLUE)步骤 1/2: 检查 GitHub Actions 状态...$(NC)\n"
-
-	# 检查 Release 是否已存在且包含 ARM64 版本
-	@if gh release view $(VERSION) >/dev/null 2>&1 && \
-		gh release view $(VERSION) --json assets -q '.assets[].name' 2>/dev/null | grep -q "AppleSilicon"; then \
-		printf "$(GREEN)✅ 检测到 ARM64 版本已存在，跳过等待$(NC)\n"; \
-	else \
-		printf "$(BLUE)推送 tag 触发 GitHub Actions...$(NC)\n"; \
-		git push origin $(VERSION) 2>/dev/null || printf "$(YELLOW)Tag 已存在，跳过推送$(NC)\n"; \
-		printf "\n$(YELLOW)⏳ 等待 ARM64 构建完成 (约 5-10 分钟)...$(NC)\n"; \
-		printf "$(CYAN)提示: 可按 Ctrl+C 取消，稍后运行 make build-intel 继续$(NC)\n\n"; \
-		$(MAKE) wait-actions || { \
-			printf "\n$(RED)❌ GitHub Actions 构建失败或已取消$(NC)\n"; \
-			exit 1; \
-		}; \
-		printf "\n$(GREEN)✅ ARM64 构建完成!$(NC)\n"; \
-	fi
-
-	@printf "\n$(BLUE)步骤 2/2: 本地构建 Intel 版本...$(NC)\n"
-	@$(MAKE) build-intel
-
-# 辅助目标：等待 Actions 完成（使用 run-id）
 wait-actions:
 	@printf "$(YELLOW)获取最新 run-id...$(NC)\n"; \
 	RUN_ID=$$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId'); \
@@ -210,90 +118,72 @@ wait-actions:
 	printf "$(CYAN)监控 run-id: $$RUN_ID$(NC)\n"; \
 	gh run watch $$RUN_ID --exit-status
 
-# 模式 2: 全自动发布（强制等待）
-release-auto:
-	@printf "$(BLUE)🚀 全自动发布模式$(NC)\n"
+release:
+	@printf "$(BLUE)🚀 智能发布模式$(NC)\n"
 	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
-
 	@if [ "$(VERSION)" = "v0.0.1" ]; then \
 		printf "$(RED)❌ 请先创建 git tag$(NC)\n"; \
 		exit 1; \
 	fi
-
-	@printf "$(BLUE)步骤 1/3: 推送 tag...$(NC)\n"
-	@git push origin $(VERSION) 2>/dev/null || printf "$(YELLOW)Tag 已存在$(NC)\n"
-
-	@printf "\n$(BLUE)步骤 2/3: 等待 GitHub Actions (全自动)...$(NC)\n"
-	@printf "$(YELLOW)⏳ 正在监控构建状态，请勿关闭终端...$(NC)\n\n"
-	@$(MAKE) wait-actions || { \
-		printf "$(RED)❌ GitHub Actions 失败$(NC)\n"; \
-		exit 1; \
-	}
-
-	@printf "\n$(GREEN)✅ ARM64 构建成功!$(NC)\n"
-	@printf "\n$(BLUE)步骤 3/3: 本地构建 Intel...$(NC)\n"
-	@$(MAKE) build-intel
-
-# 模式 3: 手动确认发布
-release-manual:
-	@printf "$(BLUE)🚀 手动发布模式$(NC)\n"
-	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
-
-	@if [ "$(VERSION)" = "v0.0.1" ]; then \
-		printf "$(RED)❌ 请先创建 git tag$(NC)\n"; \
-		exit 1; \
+	@printf "$(BLUE)步骤 1/2: 检查 GitHub Actions 状态...$(NC)\n"
+	@if gh release view $(VERSION) >/dev/null 2>&1 && \
+		gh release view $(VERSION) --json assets -q '.assets[].name' 2>/dev/null | grep -q "_AppleSilicon"; then \
+		printf "$(GREEN)✅ ARM64 版本已存在，跳过等待$(NC)\n"; \
+	else \
+		git push origin $(VERSION) 2>/dev/null || true; \
+		printf "\n$(YELLOW)⏳ 等待 ARM64 构建...$(NC)\n"; \
+		$(MAKE) wait-actions || exit 1; \
+		printf "\n$(GREEN)✅ ARM64 完成!$(NC)\n"; \
 	fi
-
-	@printf "$(BLUE)步骤 1/2: 推送 tag 触发 GitHub Actions...$(NC)\n"
-	@git push origin $(VERSION) 2>/dev/null || printf "$(YELLOW)Tag 已存在$(NC)\n"
-
-	@printf "\n$(GREEN)✅ 已触发 GitHub Actions$(NC)\n"
-	@printf "$(CYAN)请前往查看进度:$(NC)\n"
-	@printf "  https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/actions\n\n"
-
-	@read -p "确认 Actions 完成后按回车继续 (或 Ctrl+C 取消)..." confirm
 	@printf "\n$(BLUE)步骤 2/2: 本地构建 Intel...$(NC)\n"
 	@$(MAKE) build-intel
 
-# ==========================================
-# 清理与辅助
-# ==========================================
+release-auto:
+	@printf "$(BLUE)🚀 全自动发布模式$(NC)\n"
+	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
+	@if [ "$(VERSION)" = "v0.0.1" ]; then \
+		printf "$(RED)❌ 请先创建 git tag$(NC)\n"; \
+		exit 1; \
+	fi
+	@git push origin $(VERSION) 2>/dev/null || true
+	@printf "\n$(YELLOW)⏳ 等待 GitHub Actions...$(NC)\n"
+	@$(MAKE) wait-actions || exit 1
+	@printf "\n$(GREEN)✅ ARM64 成功!$(NC)\n"
+	@$(MAKE) build-intel
+
+release-manual:
+	@printf "$(BLUE)🚀 手动发布模式$(NC)\n"
+	@git push origin $(VERSION) 2>/dev/null || true
+	@printf "$(GREEN)✅ 已触发 GitHub Actions$(NC)\n"
+	@read -p "Actions 完成后按回车继续..." confirm
+	@$(MAKE) build-intel
 
 clean:
-	@printf "$(BLUE)🧹 清理构建产物...$(NC)\n"
+	@printf "$(BLUE)🧹 清理...$(NC)\n"
+	rm -rf build/ dist/ build-intel/ dist-intel/ __pycache__/ *.spec.backup
 	rm -f *.icns
 	rm -rf $(ICONSET)
-	rm -rf build/ dist/ build-intel/ dist-intel/ __pycache__/
-	rm -f *.spec.backup
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	find . -type f -name "*.pyo" -delete 2>/dev/null || true
-	@printf "$(GREEN)✅ 清理完成$(NC)\n"
+	find . -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	find . -name "*.pyc" -delete 2>/dev/null || true
+	@printf "$(GREEN)✅ 完成$(NC)\n"
 
 clean-all: clean
-	@printf "$(BLUE)🧹 清理虚拟环境...$(NC)\n"
 	rm -rf venv/ venv-intel/ .venv/
-	@printf "$(GREEN)✅ 深度清理完成$(NC)\n"
 
 install:
-	@printf "$(BLUE)📦 安装依赖...$(NC)\n"
 	pip install -r requirements.txt
-	@printf "$(GREEN)✅ 完成$(NC)\n"
 
 run:
 	python main.py
 
 status:
-	@printf "$(BLUE)📊 GitHub Actions 最近运行:$(NC)\n"
-	@gh run list --limit 5
+	gh run list --limit 5
 
 view-release:
-	@printf "$(BLUE)🌐 打开 Release 页面...$(NC)\n"
-	@open "https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/latest"
+	open "https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/latest"
 
 info:
 	@printf "$(BLUE)📋 项目信息$(NC)\n"
-	@printf "  应用名称: $(APP_NAME)\n"
-	@printf "  当前版本: $(VERSION)\n"
-	@printf "  图标源:   $(ICON_SRC)\n"
-	@printf "  仓库:     $$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || echo '未配置')\n"
+	@printf "  中文名: %s\n" "$(APP_NAME_CN)"
+	@printf "  英文名: %s\n" "$(APP_NAME_EN)"
+	@printf "  版本:   %s\n" "$(VERSION)"

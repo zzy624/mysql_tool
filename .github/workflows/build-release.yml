@@ -11,22 +11,20 @@ on:
         required: true
         default: '1.0.0'
 
-# 关键：添加权限
 permissions:
   contents: write
   actions: read
 
 env:
-  APP_NAME: 数据库调试工具
+  APP_NAME_CN: 数据库工具
+  APP_NAME_EN: mysql_tool
   PYTHON_VERSION: '3.11'
 
 jobs:
   build-arm64:
     runs-on: macos-15
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
-      asset_name: ${{ steps.package.outputs.asset_name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -78,23 +76,24 @@ jobs:
 
       - name: Build ARM64
         run: |
+          # 修改 spec 使用统一命名
+          sed -i '' "s/name='数据库调试工具'/name='${{ env.APP_NAME_CN }}'/g" main.spec
           sed -i '' "s/target_arch=None/target_arch='arm64'/" main.spec
           sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
+          
           pyinstaller --noconfirm main.spec
-          file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
+          file "dist/${{ env.APP_NAME_CN }}.app/Contents/MacOS/main"
 
       - name: Package ARM64 (DMG)
         id: package
         run: |
           cd dist
-          mv "${{ env.APP_NAME }}.app" "${{ env.APP_NAME }}_AppleSilicon.app"
+          mv "${{ env.APP_NAME_CN }}.app" "${{ env.APP_NAME_CN }}.app"
           
-          # 安装 create-dmg
           brew install create-dmg
           
-          # 尝试创建 DMG
-          DMG_NAME="${{ env.APP_NAME }}_AppleSilicon.dmg"
-          VOL_NAME="${{ env.APP_NAME }} Apple Silicon"
+          DMG_NAME="${{ env.APP_NAME_EN }}_AppleSilicon.dmg"
+          VOL_NAME="${{ env.APP_NAME_CN }} Apple Silicon"
           
           if create-dmg \
             --volname "$VOL_NAME" \
@@ -102,38 +101,35 @@ jobs:
             --window-size 800 500 \
             --icon-size 100 \
             --app-drop-link 550 200 \
-            --hide-extension "${{ env.APP_NAME }}_AppleSilicon.app" \
-            --background-color 0x2d2d2d \
+            --hide-extension "${{ env.APP_NAME_CN }}.app" \
             --format UDZO \
             "$DMG_NAME" \
-            "${{ env.APP_NAME }}_AppleSilicon.app" 2>/dev/null; then
+            "${{ env.APP_NAME_CN }}.app" 2>/dev/null; then
           
             echo "dmg_created=true" >> $GITHUB_ENV
-            echo "asset_name=$DMG_NAME" >> $GITHUB_OUTPUT
             mv "$DMG_NAME" "../$DMG_NAME"
             cd ..
             FILE_SIZE=$(du -h "$DMG_NAME" | cut -f1)
             echo "arm64_size=$FILE_SIZE" >> $GITHUB_ENV
-            echo "✅ DMG 创建成功: $FILE_SIZE"
+            echo "asset_path=$DMG_NAME" >> $GITHUB_OUTPUT
+            echo "asset_name=$DMG_NAME" >> $GITHUB_OUTPUT
           
           else
-            # 回退到 ZIP
             echo "dmg_created=false" >> $GITHUB_ENV
-            ZIP_NAME="${{ env.APP_NAME }}_AppleSilicon.zip"
-            ditto -c -k --keepParent "${{ env.APP_NAME }}_AppleSilicon.app" "../$ZIP_NAME"
+            ZIP_NAME="${{ env.APP_NAME_EN }}_AppleSilicon.zip"
+            ditto -c -k --keepParent "${{ env.APP_NAME_CN }}.app" "../$ZIP_NAME"
             cd ..
-            echo "asset_name=$ZIP_NAME" >> $GITHUB_OUTPUT
             FILE_SIZE=$(du -h "$ZIP_NAME" | cut -f1)
             echo "arm64_size=$FILE_SIZE" >> $GITHUB_ENV
-            echo "⚠️ 使用 ZIP 格式: $FILE_SIZE"
+            echo "asset_path=$ZIP_NAME" >> $GITHUB_OUTPUT
+            echo "asset_name=$ZIP_NAME" >> $GITHUB_OUTPUT
           fi
 
-      # 使用新版 softprops/action-gh-release（更稳定）
-      - name: Create Release and Upload Asset
+      - name: Create Release and Upload
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          name: ${{ env.APP_NAME }} ${{ steps.get_version.outputs.version }}
+          name: ${{ env.APP_NAME_CN }} ${{ steps.get_version.outputs.version }}
           body: |
             ## 🚀 新版本发布
             
@@ -151,13 +147,13 @@ jobs:
             3. 首次运行请右键 → 打开（绕过 Gatekeeper）
             
             ### 下载
-            **Apple Silicon (M1/M2/M3/M4)**: 下载 `${{ env.APP_NAME }}_AppleSilicon.${{ env.dmg_created == 'true' && 'dmg' || 'zip' }}`
+            **Apple Silicon (M1/M2/M3/M4)**: 下载 `${{ env.APP_NAME_EN }}_AppleSilicon.${{ env.dmg_created == 'true' && 'dmg' || 'zip' }}`
             
-            **Intel Mac**: 请等待 Intel 版本上传...
+            **Intel Mac**: ⏳ 请等待 Intel 版本上传...
           draft: true
           prerelease: false
           files: |
-            ${{ steps.package.outputs.asset_name }}
+            ${{ steps.package.outputs.asset_path }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

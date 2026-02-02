@@ -1,9 +1,11 @@
 #!/bin/bash
-# build-intel-local.sh - 本地构建 Intel x86_64 版本（PyInstaller 6.x 兼容版）
+# build-intel-local.sh - 本地构建 Intel x86_64 版本
 
 set -e
 
-APP_NAME="数据库调试工具"
+# 统一命名
+APP_NAME_CN="数据库工具"
+APP_NAME_EN="mysql_tool"
 SPEC_FILE="main.spec"
 VERSION=${1:-$(git describe --tags --abbrev=0)}
 
@@ -43,7 +45,7 @@ if ! gh release view "$VERSION" &> /dev/null; then
 fi
 
 # 检查是否已存在 Intel 版本
-if gh release view "$VERSION" --json assets -q '.assets[].name' | grep -q "Intel"; then
+if gh release view "$VERSION" --json assets -q '.assets[].name' | grep -q "_Intel"; then
     echo -e "${YELLOW}⚠️  Intel 版本已存在${NC}"
     read -p "覆盖? (y/n): " confirm
     [[ $confirm != "y" ]] && exit 0
@@ -79,7 +81,7 @@ fi
 source venv-intel/bin/activate
 
 # 安装依赖
-echo "📦 安装依赖 (PyQt5==5.15.11, PyInstaller==6.11.0)..."
+echo "📦 安装依赖..."
 if [ "$USE_ROSETTA" == "true" ]; then
     arch -x86_64 pip install --upgrade pip setuptools wheel
     arch -x86_64 pip install -r requirements.txt
@@ -88,7 +90,7 @@ else
     pip install -r requirements.txt
 fi
 
-# 验证（修复后的导入方式）
+# 验证
 echo "🔍 验证安装..."
 python -c "from PyQt5 import QtCore; print(f'✓ PyQt5 {QtCore.PYQT_VERSION_STR}')"
 python -c "import mysql.connector; print(f'✓ mysql-connector {mysql.connector.__version__}')"
@@ -111,9 +113,13 @@ if [ -f "config/config.ini.template" ]; then
     sed -i '' "s/{{DB_NAME}}/${DB_NAME:-test}/g" config/config.ini
 fi
 
-# 修改 spec
+# 修改 spec（统一中文名）
 echo "📝 配置 spec (x86_64)..."
 cp "$SPEC_FILE" "${SPEC_FILE}.backup"
+
+# 替换 spec 中的名字
+sed -i '' "s/name='数据库调试工具'/name='${APP_NAME_CN}'/g" "$SPEC_FILE"
+sed -i '' "s/name='main'/name='main'/g" "$SPEC_FILE"
 sed -i '' "s/target_arch=None/target_arch='x86_64'/" "$SPEC_FILE"
 sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" "$SPEC_FILE"
 
@@ -131,7 +137,7 @@ END_TIME=$(date +%s)
 echo "构建耗时: $((END_TIME - START_TIME)) 秒"
 
 # 验证架构
-BINARY="dist-intel/${APP_NAME}.app/Contents/MacOS/main"
+BINARY="dist-intel/${APP_NAME_CN}.app/Contents/MacOS/main"
 echo "🔍 验证架构..."
 file "$BINARY"
 if ! file "$BINARY" | grep -q "x86_64"; then
@@ -142,12 +148,12 @@ fi
 echo -e "${GREEN}✅ x86_64 验证通过${NC}"
 
 # ==========================================
-# 创建 DMG 安装包
+# 创建 DMG 安装包（修复参数）
 # ==========================================
 echo "📦 创建 DMG 安装包..."
 
 cd dist-intel
-mv "${APP_NAME}.app" "${APP_NAME}_Intel.app"
+mv "${APP_NAME_CN}.app" "${APP_NAME_CN}.app"  # 确保名字正确
 
 # 检查并安装 create-dmg
 if ! command -v create-dmg &> /dev/null; then
@@ -155,8 +161,9 @@ if ! command -v create-dmg &> /dev/null; then
     brew install create-dmg
 fi
 
-DMG_NAME="${APP_NAME}_Intel.dmg"
-VOL_NAME="${APP_NAME} Intel"
+# 使用兼容的参数（移除 --background-color）
+DMG_NAME="${APP_NAME_EN}_Intel.dmg"
+VOL_NAME="${APP_NAME_CN} Intel"
 
 echo "正在生成 DMG..."
 
@@ -166,11 +173,10 @@ if create-dmg \
   --window-size 800 500 \
   --icon-size 100 \
   --app-drop-link 550 200 \
-  --hide-extension "${APP_NAME}_Intel.app" \
-  --background-color 0x2d2d2d \
+  --hide-extension "${APP_NAME_CN}.app" \
   --format UDZO \
   "$DMG_NAME" \
-  "${APP_NAME}_Intel.app" 2>/dev/null; then
+  "${APP_NAME_CN}.app" 2>/dev/null; then
 
     echo -e "${GREEN}✅ DMG 创建成功${NC}"
     mv "$DMG_NAME" "../$DMG_NAME"
@@ -181,8 +187,8 @@ if create-dmg \
 
 else
     echo -e "${YELLOW}⚠️  DMG 创建失败，回退到 ZIP...${NC}"
-    ZIP_NAME="${APP_NAME}_Intel.zip"
-    ditto -c -k --keepParent "${APP_NAME}_Intel.app" "../$ZIP_NAME"
+    ZIP_NAME="${APP_NAME_EN}_Intel.zip"
+    ditto -c -k --keepParent "${APP_NAME_CN}.app" "../$ZIP_NAME"
     cd ..
     FILE_PATH="$ZIP_NAME"
     FILE_SIZE=$(du -h "$FILE_PATH" | cut -f1)
@@ -191,7 +197,9 @@ fi
 
 echo -e "${GREEN}✅ 打包完成: $FILE_PATH ($FILE_SIZE) [$FILE_TYPE]${NC}"
 
+# ==========================================
 # 上传到 GitHub
+# ==========================================
 echo -e "${BLUE}📤 上传到 GitHub Release...${NC}"
 gh release upload "$VERSION" "$FILE_PATH" --clobber --repo "$REPO"
 echo -e "${GREEN}✅ 上传完成${NC}"
@@ -199,23 +207,66 @@ echo -e "${GREEN}✅ 上传完成${NC}"
 # 恢复 spec
 mv "${SPEC_FILE}.backup" "$SPEC_FILE"
 
-# 更新 Release 描述
-BODY=$(gh release view "$VERSION" --json body -q .body)
-if echo "$BODY" | grep -q "等待本地构建"; then
-    NEW_BODY=$(echo "$BODY" | sed 's/⏳ Intel (x86_64): 等待本地构建.../✅ Intel (x86_64): 已完成 ('"$FILE_SIZE"')/')
-    echo "$NEW_BODY" > /tmp/release_body.txt
-    gh release edit "$VERSION" --notes-file /tmp/release_body.txt --repo "$REPO"
-fi
+# ==========================================
+# 更新 Release 描述（修复替换逻辑）
+# ==========================================
+echo "📝 更新 Release 描述..."
 
-# 检查是否发布正式版
-ASSETS=$(gh release view "$VERSION" --json assets -q '.assets[].name')
-if echo "$ASSETS" | grep -q "AppleSilicon" && echo "$ASSETS" | grep -q "Intel"; then
+# 获取当前 body
+BODY=$(gh release view "$VERSION" --json body -q .body)
+
+# 替换 Intel 状态（多种可能的文本）
+NEW_BODY=$(echo "$BODY" | sed "s/⏳ Intel (x86_64): 等待本地构建.../✅ Intel (x86_64): 已完成 ($FILE_SIZE)/g")
+# 替换下载链接描述
+NEW_BODY=$(echo "$NEW_BODY" | sed "s|⏳ 请等待 Intel 版本上传...|**Intel Mac**: 下载 \`${APP_NAME_EN}_Intel.${FILE_TYPE,,}\`|g")
+
+# 更新 release
+echo "$NEW_BODY" > /tmp/release_body.txt
+gh release edit "$VERSION" --notes-file /tmp/release_body.txt --repo "$REPO"
+
+echo -e "${GREEN}✅ Release 描述已更新${NC}"
+
+# ==========================================
+# 检查是否发布正式版（修复：在上传后检查）
+# ==========================================
+echo "🔍 检查是否可以发布正式版..."
+
+# 重新获取 assets（确保包含刚上传的）
+ASSETS=$(gh release view "$VERSION" --json assets -q '.assets[].name' 2>/dev/null || echo "")
+
+APPLE_SILICON_EXISTS=$(echo "$ASSETS" | grep -c "_AppleSilicon" || echo "0")
+INTEL_EXISTS=$(echo "$ASSETS" | grep -c "_Intel" || echo "0")
+
+echo "检测到 Assets:"
+echo "  - Apple Silicon: $APPLE_SILICON_EXISTS"
+echo "  - Intel: $INTEL_EXISTS"
+
+if [ "$APPLE_SILICON_EXISTS" -gt 0 ] && [ "$INTEL_EXISTS" -gt 0 ]; then
     echo ""
-    echo -e "${GREEN}🎉 双架构完成！${NC}"
-    read -p "发布正式版? (y/n): " publish
-    if [[ $publish == "y" ]]; then
-        gh release edit "$VERSION" --draft=false --repo "$REPO"
-        echo -e "${GREEN}✅ 已发布正式版！${NC}"
+    echo -e "${GREEN}🎉 双架构版本都已上传！${NC}"
+
+    # 检查是否已经是正式版（非 draft）
+    IS_DRAFT=$(gh release view "$VERSION" --json isDraft -q '.isDraft')
+
+    if [ "$IS_DRAFT" == "true" ]; then
+        read -p "是否发布正式版? (y/n): " publish
+        if [[ "$publish" == "y" ]]; then
+            gh release edit "$VERSION" --draft=false --repo "$REPO"
+            echo -e "${GREEN}✅ 已发布正式版！${NC}"
+        else
+            echo "保持 Draft 状态，稍后手动发布"
+        fi
+    else
+        echo "已经是正式版"
+    fi
+else
+    echo ""
+    echo -e "${YELLOW}⏳ 等待另一个架构版本...${NC}"
+    if [ "$APPLE_SILICON_EXISTS" -eq 0 ]; then
+        echo "  - 缺少 Apple Silicon 版本"
+    fi
+    if [ "$INTEL_EXISTS" -eq 0 ]; then
+        echo "  - 缺少 Intel 版本"
     fi
 fi
 
@@ -226,4 +277,6 @@ rm -rf venv-intel
 echo ""
 echo -e "${GREEN}🎉 本地 Intel 构建流程完成！${NC}"
 echo -e "🔗 ${CYAN}https://github.com/$REPO/releases/tag/$VERSION${NC}"
-open "https://github.com/$REPO/releases/tag/$VERSION"
+
+# 打开浏览器
+open "https://github.com/$REPO/releases/tag/$VERSION" 2>/dev/null || true

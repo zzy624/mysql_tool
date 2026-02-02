@@ -68,11 +68,11 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=False,  # macOS 上禁用 UPX
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=True,
-    target_arch=None,  # 会被脚本替换为 x86_64 或 arm64
+    target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
 )
@@ -85,12 +85,12 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name='数据库调试工具',
+    name='数据库工具',  # 统一中文名
 )
 
 app = BUNDLE(
     coll,
-    name='数据库调试工具.app',
+    name='数据库工具.app',
     icon='res/mysql_tool.icns',
-    bundle_identifier='com.yourcompany.mysqltool',
+    bundle_identifier='com.zzy624.mysqltool',
 )
