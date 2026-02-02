@@ -1,0 +1,17 @@
+package {{info.Name}}
+
+import (
+    {%- for package in info.Package %}
+    "{{package}}"
+	{%- endfor %}
+)
+
+type {{handler.line_to_camel(info.Name)}} struct {
+    {%- for column in info.columns %}
+    {{ handler.line_to_camel(column.Field) }} {{ handler.get_type(column.Type,column.Null) }} {{ handler.deal_gorm_tag(column.Key,column.Field,column.Type) }}
+    {%- endfor %}
+}
+
+func ({{handler.line_to_camel(info.Name)}}) TableName() string {
+	return "{{info.Name}}"
+}

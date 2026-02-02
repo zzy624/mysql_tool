@@ -1,0 +1,191 @@
+name: Build macOS App (Multi-Arch)
+
+on:
+  push:
+    tags:
+      - 'v*'  # 只有打标签时触发，如 v1.0.0
+  workflow_dispatch:  # 允许手动触发
+    inputs:
+      version:
+        description: '版本号 (如: 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+env:
+  APP_NAME: 数据库调试工具
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  # 构建 Intel 版本
+  build-intel:
+    runs-on: macos-13  # Intel runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: x64
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyqt6 pyqt6-tools
+
+      - name: Build Intel version
+        run: |
+          # 修改 spec 文件指定架构
+          sed -i '' "s/target_arch=None/target_arch='x86_64'/" main.spec
+          # 确保 entitlements 文件路径正确
+          sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
+          
+          pyinstaller --noconfirm main.spec
+          
+          # 验证架构
+          file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
+
+      - name: Package Intel
+        run: |
+          cd dist
+          ditto -c -k --keepParent "${{ env.APP_NAME }}.app" "../${{ env.APP_NAME }}_Intel.dmg"
+
+      - name: Upload Intel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-intel
+          path: ${{ env.APP_NAME }}_Intel.dmg
+
+  # 构建 Apple Silicon 版本
+  build-arm64:
+    runs-on: macos-14  # Apple Silicon (M1) runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/Library/Caches/pip
+          key: ${{ runner.os }}-arm64-pip-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pyqt6 pyqt6-tools
+
+      - name: Build ARM64 version
+        run: |
+          # 修改 spec 文件指定架构
+          sed -i '' "s/target_arch=None/target_arch='arm64'/" main.spec
+          sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
+          
+          pyinstaller --noconfirm main.spec
+          
+          # 验证架构
+          file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
+
+      - name: Package ARM64
+        run: |
+          cd dist
+          ditto -c -k --keepParent "${{ env.APP_NAME }}.app" "../${{ env.APP_NAME }}_AppleSilicon.dmg"
+
+      - name: Upload ARM64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-arm64
+          path: ${{ env.APP_NAME }}_AppleSilicon.dmg
+
+  # 构建 Universal2 版本（双架构）
+  build-universal:
+    runs-on: macos-14  # 必须在 Apple Silicon 上构建 universal2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: arm64
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller PyQt5 mysql-connector-python
+
+      - name: Build Universal2 version
+        run: |
+          # 修改 spec 文件为 universal2
+          sed -i '' "s/target_arch=None/target_arch='universal2'/" main.spec
+          sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
+          
+          pyinstaller --noconfirm main.spec
+          
+          # 验证包含两种架构
+          echo "=== 验证架构 ==="
+          file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
+          lipo -archs "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
+
+      - name: Package Universal2
+        run: |
+          cd dist
+          # 创建 DMG（更专业的安装包）
+          brew install create-dmg || true
+          
+          if command -v create-dmg &> /dev/null; then
+            create-dmg \
+              --volname "${{ env.APP_NAME }}" \
+              --window-pos 200 120 \
+              --window-size 800 400 \
+              --icon-size 100 \
+              --app-drop-link 600 185 \
+              "${{ env.APP_NAME }}.dmg" \
+              "${{ env.APP_NAME }}.app"
+          else
+            ditto -c -k --keepParent "${{ env.APP_NAME }}.app" "${{ env.APP_NAME }}.dmg"
+          fi
+          
+          mv "${{ env.APP_NAME }}.dmg" "../${{ env.APP_NAME }}_Universal.dmg"
+
+      - name: Upload Universal artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-universal
+          path: ${{ env.APP_NAME }}_Universal.dmg
+
+  # 发布到 GitHub Releases
+  release:
+    needs: [build-intel, build-arm64, build-universal]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: app-*
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/app-intel/*.dmg
+            artifacts/app-arm64/*.dmg
+            artifacts/app-universal/*.dmg
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

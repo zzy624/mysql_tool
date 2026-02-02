@@ -1,0 +1,32 @@
+package article
+
+import (
+	"testing"
+	"time"
+
+	"github.com/yybx/go_gateway_yybx/app/common/util"
+)
+
+func TestFind(t *testing.T) {
+	d, err := FindLimit(3, "id <= ? or id > ?", 3, 3)
+	if err != nil {
+		t.Error(err)
+	} else {
+		t.Log(d)
+	}
+
+	//d, err := FindPagination(10,0,"id > ?",1)
+	//if err != nil {
+	//	t.Error(err)
+	//} else {
+	//	t.Log(d)
+	//}
+}
+
+func TestScanDesc(t *testing.T) {
+	ScanDesc("1970-01-01 00:00:01", util.TimeFormat(time.Now(), util.FMT_DATE_TIME), func(articles []Article) {
+		for _, article := range articles {
+			t.Log(article)
+		}
+	})
+}

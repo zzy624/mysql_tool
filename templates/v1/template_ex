@@ -1,0 +1,92 @@
+package {{info.Name}}
+
+import (
+	"github.com/jinzhu/gorm"
+	"github.com/yybx/go_common/golang/errors"
+	db"github.com/yybx/go_zzy/app/model/gmaster"
+)
+
+func (d *{{handler.line_to_camel(info.Name)}}) Created() error {
+	tx := db.DB().Begin()
+	db := tx.Create(d)
+	if db.Error != nil {
+		tx.Rollback()
+		return db.Error
+	}
+	tx.Commit()
+	return db.Error
+}
+
+func (d *{{handler.line_to_camel(info.Name)}}) CreatedByTx(tx *gorm.DB) error {
+	db := tx.Create(d)
+	return db.Error
+}
+
+func (d *{{handler.line_to_camel(info.Name)}}) First(where ...interface{}) error {
+	err := db.DB().Scopes(scopeStatus).First(d, where...).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	return nil
+}
+
+func (d *{{handler.line_to_camel(info.Name)}}) FirstDesc(where ...interface{}) error {
+	err := db.DB().Scopes(scopeStatus).Find(d, where...).Order("id desc").Limit(1).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	return nil
+}
+
+func (d *{{handler.line_to_camel(info.Name)}}) UpdateBy(value interface{}) error {
+	err := db.DB().Model(d).Scopes(omitId).Updates(value).Error
+	if err != nil {
+		return errors.Wrap(err, "update err")
+	}
+	return nil
+}
+
+func (d *{{handler.line_to_camel(info.Name)}}) UpdateByTx(tx *gorm.DB, value interface{}) error {
+	err := tx.Model(d).Scopes(omitId).Updates(value).Error
+	if err != nil {
+		return errors.Wrap(err, "update err")
+	}
+	return nil
+}
+
+
+func Count(where ...interface{}) (int, error) {
+	var (
+		count int
+		err   error
+	)
+	if where != nil {
+		err = db.DB().Model(&{{handler.line_to_camel(info.Name)}}{}).Where(where[0], where[1:]...).Scopes(scopeStatus).Count(&count).Error
+	} else {
+        err = db.DB().Model(&{{handler.line_to_camel(info.Name)}}{}).Scopes(scopeStatus).Count(&count).Error
+	}
+
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func FindPagination(limit, offset int64, where ...interface{}) ([]{{handler.line_to_camel(info.Name)}}, error) {
+	{{info.Name}}s := make([]{{handler.line_to_camel(info.Name)}}, 0)
+	errs := db.DB().Scopes(scopeStatus).Order("created_at desc").Limit(limit+1).Offset(offset).Find(&{{info.Name}}s, where...).GetErrors()
+	return articles, errors.Wrap(db.FormatErrs(errs), "find err")
+}
+{% for value in info.columns -%}
+    {%- if value["Field"] == "status" %}
+func scopeStatus(db *gorm.DB) *gorm.DB {
+    return db.Where("status = ?", 1)
+}
+    {%- endif %}
+{%- endfor %}
+
+func omitId(db *gorm.DB) *gorm.DB {
+	return db.Omit("id")
+}
+
+
