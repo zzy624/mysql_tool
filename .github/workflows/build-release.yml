@@ -76,8 +76,6 @@ jobs:
 
       - name: Build ARM64
         run: |
-          # 修改 spec 使用统一命名
-          sed -i '' "s/name='数据库调试工具'/name='${{ env.APP_NAME_CN }}'/g" main.spec
           sed -i '' "s/target_arch=None/target_arch='arm64'/" main.spec
           sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
           
@@ -88,7 +86,6 @@ jobs:
         id: package
         run: |
           cd dist
-          mv "${{ env.APP_NAME_CN }}.app" "${{ env.APP_NAME_CN }}.app"
           
           brew install create-dmg
           
@@ -140,11 +137,12 @@ jobs:
             ### 依赖版本
             - PyQt5: 5.15.11
             - mysql-connector-python: 9.5.0
+            - Jinja2: 3.1.6
             
             ### 安装说明
             1. 下载对应架构的 **DMG** 文件
             2. 双击打开 DMG，将 App 拖到 **应用程序** 文件夹
-            3. 首次运行请右键 → 打开（绕过 Gatekeeper）
+            3. 首次运行提示安全验证，在设置"隐私与安全行"中仍要打开
             
             ### 下载
             **Apple Silicon (M1/M2/M3/M4)**: 下载 `${{ env.APP_NAME_EN }}_AppleSilicon.${{ env.dmg_created == 'true' && 'dmg' || 'zip' }}`

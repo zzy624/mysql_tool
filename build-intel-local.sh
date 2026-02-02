@@ -153,7 +153,6 @@ echo -e "${GREEN}✅ x86_64 验证通过${NC}"
 echo "📦 创建 DMG 安装包..."
 
 cd dist-intel
-mv "${APP_NAME_CN}.app" "${APP_NAME_CN}.app"  # 确保名字正确
 
 # 检查并安装 create-dmg
 if ! command -v create-dmg &> /dev/null; then
@@ -161,7 +160,6 @@ if ! command -v create-dmg &> /dev/null; then
     brew install create-dmg
 fi
 
-# 使用兼容的参数（移除 --background-color）
 DMG_NAME="${APP_NAME_EN}_Intel.dmg"
 VOL_NAME="${APP_NAME_CN} Intel"
 
