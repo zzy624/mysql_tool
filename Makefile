@@ -109,6 +109,7 @@ build-version:
 	@./build-intel-local.sh $(V)
 
 wait-actions:
+	@sleep 3
 	@printf "$(YELLOW)获取最新 run-id...$(NC)\n"; \
 	RUN_ID=$$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId'); \
 	if [ -z "$$RUN_ID" ]; then \
