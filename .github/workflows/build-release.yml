@@ -11,6 +11,11 @@ on:
         required: true
         default: '1.0.0'
 
+# 关键：添加权限
+permissions:
+  contents: write
+  actions: read
+
 env:
   APP_NAME: 数据库调试工具
   PYTHON_VERSION: '3.11'
@@ -51,7 +56,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
           pip install pyinstaller==6.11.0
-          python -c "from PyQt5 import QtCore; print(f'✓ PyQt5 {QtCore.PYQT_VERSION_STR}')"
+          python -c "from PyQt5 import QtCore; print(f'PyQt5: {QtCore.PYQT_VERSION_STR}')"
           python -c "import mysql.connector; print(f'mysql-connector: {mysql.connector.__version__}')"
 
       - name: Inject configs
@@ -71,16 +76,13 @@ jobs:
           sed -i '' "s/{{DB_PASSWORD}}/${DB_PASSWORD:-}/g" config/config.ini
           sed -i '' "s/{{DB_NAME}}/${DB_NAME:-test}/g" config/config.ini
 
-      - name: Build ARM64 with Encryption
+      - name: Build ARM64
         run: |
           sed -i '' "s/target_arch=None/target_arch='arm64'/" main.spec
           sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
           pyinstaller --noconfirm main.spec
           file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
 
-      # ==========================================
-      # 创建 DMG 安装包
-      # ==========================================
       - name: Package ARM64 (DMG)
         id: package
         run: |
@@ -126,14 +128,12 @@ jobs:
             echo "⚠️ 使用 ZIP 格式: $FILE_SIZE"
           fi
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 使用新版 softprops/action-gh-release（更稳定）
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.version }}
-          release_name: ${{ env.APP_NAME }} ${{ steps.get_version.outputs.version }}
+          name: ${{ env.APP_NAME }} ${{ steps.get_version.outputs.version }}
           body: |
             ## 🚀 新版本发布
             
@@ -144,7 +144,6 @@ jobs:
             ### 依赖版本
             - PyQt5: 5.15.11
             - mysql-connector-python: 9.5.0
-            - 加密: AES-128 (PyInstaller)
             
             ### 安装说明
             1. 下载对应架构的 **DMG** 文件
@@ -152,21 +151,15 @@ jobs:
             3. 首次运行请右键 → 打开（绕过 Gatekeeper）
             
             ### 下载
-            **Apple Silicon (M1/M2/M3/M4)**: 下载 `${{ env.APP_NAME }}_AppleSilicon.dmg`
+            **Apple Silicon (M1/M2/M3/M4)**: 下载 `${{ env.APP_NAME }}_AppleSilicon.${{ env.dmg_created == 'true' && 'dmg' || 'zip' }}`
             
             **Intel Mac**: 请等待 Intel 版本上传...
           draft: true
           prerelease: false
-
-      - name: Upload ARM64 to Release
-        uses: actions/upload-release-asset@v1
+          files: |
+            ${{ steps.package.outputs.asset_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ steps.package.outputs.asset_name }}
-          asset_name: ${{ steps.package.outputs.asset_name }}
-          asset_content_type: application/x-apple-diskimage
 
       - name: Print local build instructions
         run: |

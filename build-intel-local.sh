@@ -88,8 +88,9 @@ else
     pip install -r requirements.txt
 fi
 
-# 验证
-python -c "import PyQt5; print(f'✓ PyQt5 {PyQt5.QtCore.PYQT_VERSION_STR}')"
+# 验证（修复后的导入方式）
+echo "🔍 验证安装..."
+python -c "from PyQt5 import QtCore; print(f'✓ PyQt5 {QtCore.PYQT_VERSION_STR}')"
 python -c "import mysql.connector; print(f'✓ mysql-connector {mysql.connector.__version__}')"
 python -c "import PyInstaller; print(f'✓ PyInstaller {PyInstaller.__version__}')"
 
