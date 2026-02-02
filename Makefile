@@ -1,19 +1,13 @@
 # Makefile - 数据库调试工具构建管理
-# 支持全自动/手动双架构发布
 
-# 应用配置
 APP_NAME := 数据库调试工具
 APP := mysql_tool
 VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.1")
-
-# Icon 配置
 ICON_SRC := res/$(APP).png
 ICONSET := $(APP).iconset
-
-# Shell 设置
 SHELL := /bin/bash
 
-# 颜色定义（printf 格式，防止乱码）
+# 颜色定义
 BLUE := \033[0;34m
 GREEN := \033[0;32m
 YELLOW := \033[1;33m
@@ -21,12 +15,11 @@ RED := \033[0;31m
 CYAN := \033[0;36m
 NC := \033[0m
 
-# 默认目标
 .DEFAULT_GOAL := help
 
 .PHONY: help pyui qrc builds icon clean clean-all install run status view-release info \
         setup check build-intel build-version \
-        release release-auto release-smart release-manual
+        release release-auto release-manual
 
 # ==========================================
 # 帮助信息
@@ -45,10 +38,10 @@ help:
 	@printf "  make build-intel   仅构建 Intel 并上传 (当前 tag: $(VERSION))\n"
 	@printf "  make build-version V=v1.0.0  指定版本构建\n\n"
 	@printf "$(CYAN)【环境管理】$(NC)\n"
-	@printf "  make setup         初始化环境 (安装 gh, 生成密钥)\n"
+	@printf "  make setup         初始化环境\n"
 	@printf "  make check         检查环境配置\n"
 	@printf "  make clean         清理构建产物\n"
-	@printf "  make clean-all     深度清理 (含虚拟环境)\n\n"
+	@printf "  make clean-all     深度清理\n\n"
 
 # ==========================================
 # 原有功能：UI/资源/图标/构建
@@ -112,7 +105,7 @@ setup:
 		echo "DB_PASSWORD=" >> .env; \
 		echo "DB_NAME=test" >> .env; \
 		printf "$(GREEN)✅ 已生成 .env 文件，请编辑完善配置$(NC)\n"; \
-		printf "$(YELLOW)⚠️  重要：请将 PYINSTALLER_KEY 添加到 GitHub Secrets$(NC)\n"; \
+		printf "$(YELLOW)⚠️  注意：PyInstaller 6.x 已移除加密功能，此密钥仅用于其他用途$(NC)\n"; \
 	else \
 		printf "$(GREEN)✅ .env 文件已存在$(NC)\n"; \
 	fi
@@ -132,19 +125,15 @@ check:
 	fi
 
 	@if [ -f ".env" ]; then \
-		if grep -q "PYINSTALLER_KEY" .env; then \
-			printf "  $(GREEN)✅$(NC) 加密密钥 (.env)\n"; \
-		else \
-			printf "  $(YELLOW)⚠️$(NC) 加密密钥 (未配置)\n"; \
-		fi \
+		printf "  $(GREEN)✅$(NC) .env 文件\n"; \
 	else \
-		printf "  $(RED)❌$(NC) .env 文件 (运行 make setup)\n"; \
+		printf "  $(YELLOW)⚠️$(NC) .env 文件 (可选)\n"; \
 	fi
 
 	@if [ -f "build-intel-local.sh" ]; then \
 		printf "  $(GREEN)✅$(NC) 构建脚本\n"; \
 	else \
-		printf "  $(RED)❌$(NC) 构建脚本 (build-intel-local.sh)\n"; \
+		printf "  $(RED)❌$(NC) 构建脚本\n"; \
 	fi
 
 # ==========================================
@@ -173,11 +162,10 @@ build-version:
 	@./build-intel-local.sh $(V)
 
 # ==========================================
-# 三种发布模式
+# 三种发布模式（修复版）
 # ==========================================
 
 # 模式 1: 智能发布（默认，推荐）
-# 自动检测 GitHub Actions 是否已完成，避免重复等待
 release:
 	@printf "$(BLUE)🚀 智能发布模式$(NC)\n"
 	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
@@ -201,7 +189,7 @@ release:
 		git push origin $(VERSION) 2>/dev/null || printf "$(YELLOW)Tag 已存在，跳过推送$(NC)\n"; \
 		printf "\n$(YELLOW)⏳ 等待 ARM64 构建完成 (约 5-10 分钟)...$(NC)\n"; \
 		printf "$(CYAN)提示: 可按 Ctrl+C 取消，稍后运行 make build-intel 继续$(NC)\n\n"; \
-		gh run watch --tag $(VERSION) --exit-status || { \
+		$(MAKE) wait-actions || { \
 			printf "\n$(RED)❌ GitHub Actions 构建失败或已取消$(NC)\n"; \
 			exit 1; \
 		}; \
@@ -211,8 +199,18 @@ release:
 	@printf "\n$(BLUE)步骤 2/2: 本地构建 Intel 版本...$(NC)\n"
 	@$(MAKE) build-intel
 
+# 辅助目标：等待 Actions 完成（使用 run-id）
+wait-actions:
+	@printf "$(YELLOW)获取最新 run-id...$(NC)\n"; \
+	RUN_ID=$$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId'); \
+	if [ -z "$$RUN_ID" ]; then \
+		printf "$(RED)❌ 未找到运行中的 workflow$(NC)\n"; \
+		exit 1; \
+	fi; \
+	printf "$(CYAN)监控 run-id: $$RUN_ID$(NC)\n"; \
+	gh run watch $$RUN_ID --exit-status
+
 # 模式 2: 全自动发布（强制等待）
-# 适用于首次发布或确保重新构建
 release-auto:
 	@printf "$(BLUE)🚀 全自动发布模式$(NC)\n"
 	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
@@ -227,7 +225,7 @@ release-auto:
 
 	@printf "\n$(BLUE)步骤 2/3: 等待 GitHub Actions (全自动)...$(NC)\n"
 	@printf "$(YELLOW)⏳ 正在监控构建状态，请勿关闭终端...$(NC)\n\n"
-	@gh run watch --tag $(VERSION) --exit-status || { \
+	@$(MAKE) wait-actions || { \
 		printf "$(RED)❌ GitHub Actions 失败$(NC)\n"; \
 		exit 1; \
 	}
@@ -236,8 +234,7 @@ release-auto:
 	@printf "\n$(BLUE)步骤 3/3: 本地构建 Intel...$(NC)\n"
 	@$(MAKE) build-intel
 
-# 模式 3: 手动确认发布（旧版兼容）
-# 推送后手动去网页查看，确认后再继续
+# 模式 3: 手动确认发布
 release-manual:
 	@printf "$(BLUE)🚀 手动发布模式$(NC)\n"
 	@printf "版本: $(GREEN)%s$(NC)\n\n" "$(VERSION)"
@@ -293,23 +290,6 @@ status:
 view-release:
 	@printf "$(BLUE)🌐 打开 Release 页面...$(NC)\n"
 	@open "https://github.com/$$(gh repo view --json nameWithOwner -q .nameWithOwner)/releases/latest"
-
-dmg:
-	@if [ ! -d "dist/${APP_NAME}.app" ]; then \
-		printf "$(RED)❌ 未找到 dist/${APP_NAME}.app，请先运行 make builds$(NC)\n"; \
-		exit 1; \
-	fi
-	@printf "$(BLUE)📦 创建 DMG...$(NC)\n"
-	@brew install create-dmg 2>/dev/null || true
-	@cd dist && \
-	create-dmg \
-	  --volname "${APP_NAME}" \
-	  --window-size 800 500 \
-	  --icon-size 100 \
-	  --app-drop-link 550 200 \
-	  "${APP_NAME}.dmg" \
-	  "${APP_NAME}.app"
-	@printf "$(GREEN)✅ DMG 创建完成: dist/${APP_NAME}.dmg$(NC)\n"
 
 info:
 	@printf "$(BLUE)📋 项目信息$(NC)\n"

@@ -51,7 +51,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements.txt
           pip install pyinstaller==6.11.0
-          python -c "import PyQt5; print(f'PyQt5: {PyQt5.QtCore.PYQT_VERSION_STR}')"
+          python -c "from PyQt5 import QtCore; print(f'✓ PyQt5 {QtCore.PYQT_VERSION_STR}')"
           python -c "import mysql.connector; print(f'mysql-connector: {mysql.connector.__version__}')"
 
       - name: Inject configs
