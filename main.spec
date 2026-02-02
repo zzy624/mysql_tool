@@ -96,7 +96,7 @@ exe = EXE(
     argv_emulation=True,
     target_arch=None,
     codesign_identity=None,
-    entitlements_file='None',
+    entitlements_file=None,
 )
 
 coll = COLLECT(
