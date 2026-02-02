@@ -16,9 +16,9 @@ env:
   PYTHON_VERSION: '3.11'
 
 jobs:
-  # Intel 版本（使用 macos-15-large）
+  # Intel 版本（使用 macos-15）
   build-intel:
-    runs-on: macos-15-large  #
+    runs-on: macOS-15
     steps:
       - uses: actions/checkout@v4
 
@@ -87,7 +87,7 @@ jobs:
 
   # Apple Silicon 版本（使用 macos-15）
   build-arm64:
-    runs-on: macos-15  # ✅ 修复：使用最新 ARM64 runner
+    runs-on: macOS-latest
     steps:
       - uses: actions/checkout@v4
 
