@@ -32,4 +32,3 @@ secrets/
 # macOS
 .DS_Store
 *.dmg
-*.zip
