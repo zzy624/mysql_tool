@@ -117,8 +117,6 @@ fi
 echo "📝 配置 spec (x86_64)..."
 cp "$SPEC_FILE" "${SPEC_FILE}.backup"
 
-# 替换 spec 中的名字
-sed -i '' "s/name='数据库调试工具'/name='${APP_NAME_CN}'/g" "$SPEC_FILE"
 sed -i '' "s/name='main'/name='main'/g" "$SPEC_FILE"
 sed -i '' "s/target_arch=None/target_arch='x86_64'/" "$SPEC_FILE"
 sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" "$SPEC_FILE"

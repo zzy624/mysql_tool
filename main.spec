@@ -2,31 +2,36 @@
 
 import os
 import sys
-
-def get_mysql_plugin_path():
+def get_mysql_paths():
     import mysql.connector
     mysql_path = os.path.dirname(mysql.connector.__file__)
-    plugin_path = os.path.join(mysql_path, 'plugins')
-    return plugin_path if os.path.exists(plugin_path) else None
+    locales_path = os.path.join(mysql_path, 'locales')
+    plugins_path = os.path.join(mysql_path, 'plugins')
+    return mysql_path, locales_path, plugins_path
 
-mysql_plugin_path = get_mysql_plugin_path()
+mysql_path, locales_path, plugins_path = get_mysql_paths()
+
+datas = [
+    ('./res/mysql_tool.icns','.'),
+    ('./templates/v1/template','./templates/v1'),
+    ('./templates/v1/template_ex','./templates/v1'),
+    ('./config/config.ini','./config'),
+]
+
+if os.path.exists(locales_path):
+    datas.append((locales_path, 'mysql/connector/locales'))
 
 binaries = []
-if mysql_plugin_path:
-    for file in os.listdir(mysql_plugin_path):
+if os.path.exists(plugins_path):
+    for file in os.listdir(plugins_path):
         if file.endswith('.so') or file.endswith('.dylib'):
-            binaries.append((os.path.join(mysql_plugin_path, file), 'mysql/connector/plugins'))
+            binaries.append((os.path.join(plugins_path, file), 'mysql/connector/plugins'))
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=binaries,
-    datas=[
-        ('./res/mysql_tool.icns','.'),
-        ('./templates/v1/template','./templates/v1'),
-        ('./templates/v1/template_ex','./templates/v1'),
-        ('./config/config.ini','./config')
-    ],
+    datas=datas,  # 包含 locales
     hiddenimports=[
         'PyQt5.sip',
         'PyQt5.QtCore',
@@ -89,9 +94,9 @@ exe = EXE(
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=True,
-    target_arch=None,
+    target_arch='x86_64',
     codesign_identity=None,
-    entitlements_file=None,
+    entitlements_file='entitlements.plist',
 )
 
 coll = COLLECT(
