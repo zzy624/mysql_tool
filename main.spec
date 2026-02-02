@@ -1,20 +1,63 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('./res/mysql_tool.icns','.'),('./templates/v1/template','./templates/v1')
-                           ,('./templates/v1/template_ex','./templates/v1'),('./config/config.ini','./config')],
-    hiddenimports=[],
+    datas=[
+        ('./res/mysql_tool.icns','.'),
+        ('./templates/v1/template','./templates/v1'),
+        ('./templates/v1/template_ex','./templates/v1'),
+        ('./config/config.ini','./config')
+    ],
+    hiddenimports=[
+        'PyQt5.sip',
+        'PyQt5.QtCore',
+        'PyQt5.QtGui',
+        'PyQt5.QtWidgets',
+        'mysql.connector',
+        'mysql.connector.locales',
+        'mysql.connector.locales.eng_client_error',
+        'mysql.connector.plugins',
+        'mysql.connector.plugins.caching_sha2_password',
+        'mysql.connector.plugins.mysql_native_password',
+        'pkg_resources.py2_warn',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'PyQt5.QtBluetooth',
+        'PyQt5.QtDesigner',
+        'PyQt5.QtHelp',
+        'PyQt5.QtMultimedia',
+        'PyQt5.QtMultimediaWidgets',
+        'PyQt5.QtNetwork',
+        'PyQt5.QtNfc',
+        'PyQt5.QtOpenGL',
+        'PyQt5.QtPositioning',
+        'PyQt5.QtPrintSupport',
+        'PyQt5.QtQml',
+        'PyQt5.QtQuick',
+        'PyQt5.QtQuickWidgets',
+        'PyQt5.QtSensors',
+        'PyQt5.QtSerialPort',
+        'PyQt5.QtSql',
+        'PyQt5.QtTest',
+        'PyQt5.QtWebChannel',
+        'PyQt5.QtWebEngine',
+        'PyQt5.QtWebEngineCore',
+        'PyQt5.QtWebEngineWidgets',
+        'PyQt5.QtWebSockets',
+        'PyQt5.QtXml',
+        'PyQt5.QtXmlPatterns',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
     noarchive=False,
 )
-pyz = PYZ(a.pure)
+
+pyz = PYZ(a.pure, a.zipped_data)
 
 exe = EXE(
     pyz,
@@ -25,26 +68,29 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,  # macOS 上禁用 UPX
     console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
+    argv_emulation=True,
+    target_arch=None,  # 会被脚本替换为 x86_64 或 arm64
     codesign_identity=None,
     entitlements_file=None,
 )
+
 coll = COLLECT(
     exe,
     a.binaries,
+    a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name='数据库调试工具',
 )
+
 app = BUNDLE(
     coll,
     name='数据库调试工具.app',
     icon='res/mysql_tool.icns',
-    bundle_identifier=None,
+    bundle_identifier='com.yourcompany.mysqltool',
 )

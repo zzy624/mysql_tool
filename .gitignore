@@ -1,6 +1,31 @@
-build
-dist
 go_src
-__pycache__
-.DS_Store
+
+# 构建产物
+/build/
+/dist/
+/dist-intel/
+/build-intel/
+/__pycache__/
+/*.spec.backup
+*.pyo
 *.pyc
+
+# 虚拟环境
+/venv/
+/venv-intel/
+/.venv/
+
+# 敏感信息
+.env
+.env.local
+*.key
+secrets/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store

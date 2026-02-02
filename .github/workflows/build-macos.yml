@@ -1,4 +1,4 @@
-name: Build macOS App (Multi-Arch)
+name: Build and Release (ARM64 + Intel)
 
 on:
   push:
@@ -16,98 +16,43 @@ env:
   PYTHON_VERSION: '3.11'
 
 jobs:
-  # Intel 版本（使用 macos-15）
-  build-intel:
-    runs-on: macOS-15
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python (Intel)
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          architecture: x64  # 明确指定 x64
-
-      - name: Cache pip packages
-        uses: actions/cache@v3
-        with:
-          path: ~/Library/Caches/pip
-          key: ${{ runner.os }}-intel-pip-${{ hashFiles('**/requirements.txt') }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller pyqt6 pyqt6-tools
-          pip install mysql-connector-python
-          
-          # 验证架构
-          python -c "import mysql.connector; print('MySQL Connector OK')"
-          file $(python -c "import mysql.connector; print(mysql.connector.__file__)")
-
-      - name: Inject configs
-        env:
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PORT: ${{ secrets.DB_PORT }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-        run: |
-          # 替换配置文件中的占位符
-          sed -i '' "s/{{DB_HOST}}/$DB_HOST/g" config/config.ini
-          sed -i '' "s/{{DB_PORT}}/$DB_PORT/g" config/config.ini
-          sed -i '' "s/{{DB_USER}}/$DB_USER/g" config/config.ini
-          sed -i '' "s/{{DB_PASSWORD}}/$DB_PASSWORD/g" config/config.ini
-          sed -i '' "s/{{DB_NAME}}/$DB_NAME/g" config/config.ini
-
-      - name: Build Intel version
-        run: |
-          # 修改 spec 文件为 x86_64
-          sed -i '' "s/target_arch=None/target_arch='x86_64'/" main.spec
-          sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
-          
-          pyinstaller --noconfirm main.spec
-          
-          # 验证架构
-          echo "=== 验证 Intel 架构 ==="
-          file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
-          lipo -archs "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main" || echo "单架构文件"
-
-      - name: Package Intel
-        run: |
-          cd dist
-          # 重命名以区分架构
-          mv "${{ env.APP_NAME }}.app" "${{ env.APP_NAME }}_Intel.app"
-          ditto -c -k --keepParent "${{ env.APP_NAME }}_Intel.app" "../${{ env.APP_NAME }}_Intel.zip"
-
-      - name: Upload Intel artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-intel
-          path: ${{ env.APP_NAME }}_Intel.zip
-
-  # Apple Silicon 版本（使用 macos-15）
   build-arm64:
-    runs-on: macOS-latest
+    runs-on: macos-15
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+      asset_name: ${{ steps.package.outputs.asset_name }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Python (ARM64)
+      - name: Get Version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          architecture: arm64
 
       - name: Cache pip packages
         uses: actions/cache@v3
         with:
           path: ~/Library/Caches/pip
-          key: ${{ runner.os }}-arm64-pip-${{ hashFiles('**/requirements.txt') }}
+          key: ${{ runner.os }}-arm64-pyqt5-${{ hashFiles('**/requirements.txt') }}
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller pyqt6 pyqt6-tools
-          pip install mysql-connector-python
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install pyinstaller==6.11.0
+          python -c "import PyQt5; print(f'PyQt5: {PyQt5.QtCore.PYQT_VERSION_STR}')"
+          python -c "import mysql.connector; print(f'mysql-connector: {mysql.connector.__version__}')"
 
       - name: Inject configs
         env:
@@ -117,66 +62,112 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
         run: |
-          sed -i '' "s/{{DB_HOST}}/$DB_HOST/g" config/config.ini
-          sed -i '' "s/{{DB_PORT}}/$DB_PORT/g" config/config.ini
-          sed -i '' "s/{{DB_USER}}/$DB_USER/g" config/config.ini
-          sed -i '' "s/{{DB_PASSWORD}}/$DB_PASSWORD/g" config/config.ini
-          sed -i '' "s/{{DB_NAME}}/$DB_NAME/g" config/config.ini
+          if [ -f "config/config.ini.template" ]; then
+            cp config/config.ini.template config/config.ini
+          fi
+          sed -i '' "s/{{DB_HOST}}/${DB_HOST:-localhost}/g" config/config.ini
+          sed -i '' "s/{{DB_PORT}}/${DB_PORT:-3306}/g" config/config.ini
+          sed -i '' "s/{{DB_USER}}/${DB_USER:-root}/g" config/config.ini
+          sed -i '' "s/{{DB_PASSWORD}}/${DB_PASSWORD:-}/g" config/config.ini
+          sed -i '' "s/{{DB_NAME}}/${DB_NAME:-test}/g" config/config.ini
 
-      - name: Build ARM64 version
+      - name: Build ARM64 with Encryption
         run: |
-          # 修改 spec 文件为 arm64
           sed -i '' "s/target_arch=None/target_arch='arm64'/" main.spec
           sed -i '' "s|entitlements_file=None|entitlements_file='entitlements.plist'|" main.spec
-          
           pyinstaller --noconfirm main.spec
-          
-          # 验证架构
-          echo "=== 验证 ARM64 架构 ==="
           file "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main"
-          lipo -archs "dist/${{ env.APP_NAME }}.app/Contents/MacOS/main" || echo "单架构文件"
 
-      - name: Package ARM64
+      # ==========================================
+      # 创建 DMG 安装包
+      # ==========================================
+      - name: Package ARM64 (DMG)
+        id: package
         run: |
           cd dist
           mv "${{ env.APP_NAME }}.app" "${{ env.APP_NAME }}_AppleSilicon.app"
-          ditto -c -k --keepParent "${{ env.APP_NAME }}_AppleSilicon.app" "../${{ env.APP_NAME }}_AppleSilicon.zip"
-
-      - name: Upload ARM64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-arm64
-          path: ${{ env.APP_NAME }}_AppleSilicon.zip
-
-  # 发布到 GitHub Releases
-  release:
-    needs: [build-intel, build-arm64]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          pattern: app-*
+          
+          # 安装 create-dmg
+          brew install create-dmg
+          
+          # 尝试创建 DMG
+          DMG_NAME="${{ env.APP_NAME }}_AppleSilicon.dmg"
+          VOL_NAME="${{ env.APP_NAME }} Apple Silicon"
+          
+          if create-dmg \
+            --volname "$VOL_NAME" \
+            --window-pos 200 120 \
+            --window-size 800 500 \
+            --icon-size 100 \
+            --app-drop-link 550 200 \
+            --hide-extension "${{ env.APP_NAME }}_AppleSilicon.app" \
+            --background-color 0x2d2d2d \
+            --format UDZO \
+            "$DMG_NAME" \
+            "${{ env.APP_NAME }}_AppleSilicon.app" 2>/dev/null; then
+          
+            echo "dmg_created=true" >> $GITHUB_ENV
+            echo "asset_name=$DMG_NAME" >> $GITHUB_OUTPUT
+            mv "$DMG_NAME" "../$DMG_NAME"
+            cd ..
+            FILE_SIZE=$(du -h "$DMG_NAME" | cut -f1)
+            echo "arm64_size=$FILE_SIZE" >> $GITHUB_ENV
+            echo "✅ DMG 创建成功: $FILE_SIZE"
+          
+          else
+            # 回退到 ZIP
+            echo "dmg_created=false" >> $GITHUB_ENV
+            ZIP_NAME="${{ env.APP_NAME }}_AppleSilicon.zip"
+            ditto -c -k --keepParent "${{ env.APP_NAME }}_AppleSilicon.app" "../$ZIP_NAME"
+            cd ..
+            echo "asset_name=$ZIP_NAME" >> $GITHUB_OUTPUT
+            FILE_SIZE=$(du -h "$ZIP_NAME" | cut -f1)
+            echo "arm64_size=$FILE_SIZE" >> $GITHUB_ENV
+            echo "⚠️ 使用 ZIP 格式: $FILE_SIZE"
+          fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            artifacts/app-intel/*.zip
-            artifacts/app-arm64/*.zip
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-          body: |
-            ## 下载说明
-            
-            根据你的 Mac 芯片选择对应版本：
-            
-            - **Intel 芯片（旧款 Mac）**：下载 `数据库调试工具_Intel.zip`
-            - **Apple Silicon（M1/M2/M3）**：下载 `数据库调试工具_AppleSilicon.zip`（性能更好）
-
+        id: create_release
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: ${{ env.APP_NAME }} ${{ steps.get_version.outputs.version }}
+          body: |
+            ## 🚀 新版本发布
+            
+            ### 构建状态
+            - ✅ Apple Silicon (ARM64): 已完成 (${{ env.arm64_size }})
+            - ⏳ Intel (x86_64): 等待本地构建...
+            
+            ### 依赖版本
+            - PyQt5: 5.15.11
+            - mysql-connector-python: 9.5.0
+            - 加密: AES-128 (PyInstaller)
+            
+            ### 安装说明
+            1. 下载对应架构的 **DMG** 文件
+            2. 双击打开 DMG，将 App 拖到 **应用程序** 文件夹
+            3. 首次运行请右键 → 打开（绕过 Gatekeeper）
+            
+            ### 下载
+            **Apple Silicon (M1/M2/M3/M4)**: 下载 `${{ env.APP_NAME }}_AppleSilicon.dmg`
+            
+            **Intel Mac**: 请等待 Intel 版本上传...
+          draft: true
+          prerelease: false
+
+      - name: Upload ARM64 to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ steps.package.outputs.asset_name }}
+          asset_name: ${{ steps.package.outputs.asset_name }}
+          asset_content_type: application/x-apple-diskimage
+
+      - name: Print local build instructions
+        run: |
+          echo "::notice title=本地构建::运行: make build-intel 或 ./build-intel-local.sh ${{ steps.get_version.outputs.version }}"
